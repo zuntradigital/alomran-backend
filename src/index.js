@@ -39,11 +39,41 @@ db.listCollections().then(collections => {
 const app = express()
 const PORT = process.env.PORT || 5000
 
+const allowedOrigins = [
+  /^http:\/\/localhost:\d+$/,
+  /^https?:\/\/.*\.vercel\.app$/,
+  /^https?:\/\/.*\.opa-sa\.com$/,
+  'https://opa-sa.com',
+  'https://www.opa-sa.com',
+  'https://admin.opa-sa.com',
+  'https://alomran-factory.vercel.app',
+  'https://alomran-factory-gk73.vercel.app',
+]
+
+if (process.env.FRONTEND_URL) {
+  process.env.FRONTEND_URL.split(',').forEach(url => allowedOrigins.push(url.trim()))
+}
+if (process.env.DASHBOARD_URL) {
+  process.env.DASHBOARD_URL.split(',').forEach(url => allowedOrigins.push(url.trim()))
+}
+
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL  || 'http://localhost:5173',
-    process.env.DASHBOARD_URL || 'http://localhost:5174',
-  ],
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true)
+
+    const allowed = allowedOrigins.some(pattern => {
+      if (typeof pattern === 'string') return pattern === origin
+      if (pattern instanceof RegExp) return pattern.test(origin)
+      return false
+    })
+
+    if (allowed) {
+      callback(null, true)
+    } else {
+      console.warn('CORS blocked origin:', origin)
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
   credentials: true,
 }))
 app.use(express.json())

@@ -7,12 +7,23 @@ const admin = require('firebase-admin')
 const jwt = require('jsonwebtoken')
 
 // ── Firebase Admin SDK ───────────────────────────────────────────
-const serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT || '{}'
-let serviceAccount = {}
+if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+  console.error('❌ Missing env var: FIREBASE_SERVICE_ACCOUNT (must be the service account JSON as a string)')
+  process.exit(1)
+}
+
+let serviceAccount
 try {
-  serviceAccount = JSON.parse(serviceAccountStr)
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
 } catch (e) {
-  console.error('❌ Invalid FIREBASE_SERVICE_ACCOUNT JSON')
+  console.error('❌ FIREBASE_SERVICE_ACCOUNT is not valid JSON:', e.message)
+  process.exit(1)
+}
+
+const requiredFields = ['type', 'project_id', 'private_key', 'client_email']
+const missingFields = requiredFields.filter(f => !serviceAccount[f])
+if (missingFields.length) {
+  console.error('❌ FIREBASE_SERVICE_ACCOUNT is missing required fields:', missingFields.join(', '))
   process.exit(1)
 }
 
@@ -43,9 +54,13 @@ const allowedOrigins = [
   /^http:\/\/localhost:\d+$/,
   /^https?:\/\/.*\.vercel\.app$/,
   /^https?:\/\/.*\.opa-sa\.com$/,
+  /^https?:\/\/.*\.zyntracortex\.com$/,
   'https://opa-sa.com',
   'https://www.opa-sa.com',
   'https://admin.opa-sa.com',
+  'https://zyntracortex.com',
+  'https://www.zyntracortex.com',
+  'https://admin.zyntracortex.com',
   'https://alomran-factory.vercel.app',
   'https://alomran-factory-gk73.vercel.app',
 ]
@@ -74,6 +89,7 @@ app.use(cors({
       callback(new Error('Not allowed by CORS'))
     }
   },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   credentials: true,
 }))
 app.use(express.json())
@@ -153,6 +169,10 @@ const DEFAULT_COMPANY = {
 // ── Health Check ──────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', database: 'Firebase Firestore', timestamp: new Date().toISOString() })
+})
+
+app.get('/api/status', (req, res) => {
+  res.json({ status: 'ok', database: 'Firebase Firestore', time: new Date().toISOString() })
 })
 
 // ══════════════════════════════════════════════════════════════════
@@ -577,6 +597,17 @@ app.delete('/api/inquiries/:id', protect, requireAdmin, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
+})
+
+// ══════════════════════════════════════════════════════════════════
+// ERROR HANDLER
+// ══════════════════════════════════════════════════════════════════
+
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err)
+  const status = err.status || err.statusCode || 500
+  res.status(status).json({ error: true, message: err.message || 'Internal server error' })
 })
 
 // ══════════════════════════════════════════════════════════════════
